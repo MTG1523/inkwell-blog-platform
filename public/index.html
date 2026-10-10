@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inkwell — A Modern Blogging Platform</title>
+  <meta name="description" content="Discover and share ideas on Inkwell — a modern blogging platform where writers and readers connect." />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+</head>
+<body>
+  <div id="page-loader"><div class="loader-spinner"></div></div>
+
+  <header class="navbar" id="navbar"></header>
+
+  <main class="page">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-eyebrow">✦ Community-Powered Writing</div>
+        <h1>Ideas Worth<br/>Sharing</h1>
+        <p>A modern platform for curious minds. Write, read, and discuss ideas that matter to you.</p>
+        <div class="hero-actions" id="hero-actions">
+          <a href="/auth.html?tab=register" class="btn btn-primary btn-lg" id="hero-start-btn">
+            Start Writing ✦
+          </a>
+          <a href="#posts" class="btn btn-ghost btn-lg">Explore Posts</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Posts Feed -->
+    <section id="posts" style="padding: 20px 0 80px;">
+      <div class="container">
+        <div class="section-header">
+          <div>
+            <div class="section-title">Latest Stories</div>
+            <div class="section-sub" id="post-count">Loading...</div>
+          </div>
+          <a href="/editor.html" class="btn btn-primary" id="write-btn" style="display:none">✦ Write a Post</a>
+        </div>
+        <div class="posts-grid" id="posts-grid">
+          <!-- Skeleton loaders -->
+          ${[1,2,3,4,5,6].map(() => `
+            <div class="card skeleton-card">
+              <div class="sk-line skeleton" style="width:40%;height:10px;margin-bottom:16px;"></div>
+              <div class="sk-line skeleton sk-title"></div>
+              <div class="sk-line skeleton sk-text"></div>
+              <div class="sk-line skeleton sk-text"></div>
+              <div class="sk-line skeleton sk-text" style="width:55%"></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/utils.js"></script>
+  <script>
+    (async function init() {
+      renderNavbar('home');
+
+      // Adjust hero CTA if logged in
+      if (Auth.isLoggedIn()) {
+        const heroBtn = document.getElementById('hero-start-btn');
+        if (heroBtn) { heroBtn.textContent = '✦ Write a Post'; heroBtn.href = '/editor.html'; }
+        const writeBtn = document.getElementById('write-btn');
+        if (writeBtn) writeBtn.style.display = '';
+      }
+
+      // Load posts
+      try {
+        const posts = await api.getPosts();
+        const grid = document.getElementById('posts-grid');
+        const countEl = document.getElementById('post-count');
+        countEl.textContent = posts.length === 0 ? 'No posts yet — be the first!' : `${posts.length} post${posts.length !== 1 ? 's' : ''} published`;
+
+        if (posts.length === 0) {
+          grid.innerHTML = `
+            <div class="empty-state" style="grid-column:1/-1">
+              <div class="empty-icon">📝</div>
+              <div class="empty-title">No posts yet</div>
+              <div class="empty-sub">Be the first to share your ideas with the community.</div>
+              <a href="/auth.html?tab=register" class="btn btn-primary">Start Writing</a>
+            </div>
+          `;
+        } else {
+          grid.innerHTML = posts.map(p => `
+            <div class="card post-card" onclick="window.location.href='/post.html?id=${p.id}'">
+              <div class="post-card-meta">
+                ${makeAvatar(p.username, p.avatar_color)}
+                <div>
+                  <div class="post-author">${escHtml(p.username)}</div>
+                  <div class="post-date">${timeAgo(p.created_at)}</div>
+                </div>
+              </div>
+              <h3>${escHtml(p.title)}</h3>
+              <p>${escHtml(p.excerpt)}</p>
+              <div class="post-card-footer">
+                <div class="post-stats">
+                  <span class="stat">📖 ${p.read_time} min read</span>
+                  <span class="stat">💬 ${p.comment_count}</span>
+                </div>
+                <span class="read-more">Read →</span>
+              </div>
+            </div>
+          `).join('');
+        }
+      } catch (err) {
+        document.getElementById('posts-grid').innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">⚠️</div><div class="empty-title">Couldn't load posts</div><div class="empty-sub">${err.message}</div></div>`;
+      }
+
+      hideLoader();
+    })();
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+</body>
+</html>

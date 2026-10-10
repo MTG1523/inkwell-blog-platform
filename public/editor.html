@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Write — Inkwell</title>
+  <meta name="description" content="Write and publish your ideas on Inkwell with a beautiful markdown editor." />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div id="page-loader"><div class="loader-spinner"></div></div>
+
+  <header class="navbar" id="navbar"></header>
+
+  <main class="page">
+    <div class="editor-page container">
+      <div class="editor-header">
+        <a href="/" class="back-link">← Back to feed</a>
+        <h1 id="editor-title-heading">New Post</h1>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-top:4px">Write in Markdown. Preview renders live on the right.</p>
+      </div>
+
+      <input type="text" id="post-title-input" placeholder="Your post title..." maxlength="120" />
+
+      <div class="markdown-toolbar">
+        <button class="toolbar-btn" onclick="insertMd('**', '**')" title="Bold">B</button>
+        <button class="toolbar-btn" onclick="insertMd('*', '*')" title="Italic"><em>I</em></button>
+        <button class="toolbar-btn" onclick="insertMd('# ', '')" title="Heading 1">H1</button>
+        <button class="toolbar-btn" onclick="insertMd('## ', '')" title="Heading 2">H2</button>
+        <button class="toolbar-btn" onclick="insertMd('### ', '')" title="Heading 3">H3</button>
+        <button class="toolbar-btn" onclick="insertMd('> ', '')" title="Quote">❝</button>
+        <button class="toolbar-btn" onclick="insertMd('`', '`')" title="Inline code">{'}'}</button>
+        <button class="toolbar-btn" onclick="insertMd('\n```\n', '\n```')" title="Code block">⌥</button>
+        <button class="toolbar-btn" onclick="insertMd('- ', '')" title="List item">•</button>
+        <button class="toolbar-btn" onclick="insertMd('---\n', '')" title="Divider">—</button>
+        <button class="toolbar-btn" onclick="insertMd('[link text](', ')')" title="Link">🔗</button>
+      </div>
+
+      <div class="editor-layout">
+        <div class="editor-pane">
+          <div class="pane-label">Markdown Source</div>
+          <textarea id="post-content-input" placeholder="Start writing your post in Markdown...
+
+# Introduction
+Write something amazing here.
+
+## Section
+Your content goes here..."></textarea>
+        </div>
+        <div class="preview-pane">
+          <div class="pane-label">Live Preview</div>
+          <div class="preview-box post-content" id="preview-box">
+            <p style="color:var(--text-muted);font-style:italic">Start typing to see a preview...</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="editor-error" class="form-error hidden" style="margin-top:12px"></div>
+      <div class="editor-actions">
+        <button class="btn btn-ghost" onclick="history.back()">Cancel</button>
+        <button class="btn btn-primary" id="publish-btn" onclick="publishPost()">
+          ✦ Publish Post
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- marked.js for markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/utils.js"></script>
+  <script>
+    if (!Auth.requireAuth()) { /* redirected */ }
+
+    renderNavbar('write');
+
+    // Check if editing existing post
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get('edit');
+    let isEditing = false;
+
+    async function loadEditPost() {
+      if (!editId) { hideLoader(); return; }
+      try {
+        const post = await api.getPost(editId);
+        const user = Auth.getUser();
+        if (post.author_id !== user.id) {
+          showToast('You can only edit your own posts', 'error');
+          window.location.href = '/post.html?id=' + editId;
+          return;
+        }
+        document.getElementById('editor-title-heading').textContent = 'Edit Post';
+        document.getElementById('post-title-input').value = post.title;
+        document.getElementById('post-content-input').value = post.content;
+        document.getElementById('publish-btn').textContent = '✦ Update Post';
+        updatePreview();
+        isEditing = true;
+      } catch {
+        showToast('Failed to load post', 'error');
+      }
+      hideLoader();
+    }
+    loadEditPost();
+
+    // Live preview
+    const contentInput = document.getElementById('post-content-input');
+    const previewBox = document.getElementById('preview-box');
+
+    function updatePreview() {
+      const md = contentInput.value;
+      if (!md.trim()) {
+        previewBox.innerHTML = '<p style="color:var(--text-muted);font-style:italic">Start typing to see a preview...</p>';
+        return;
+      }
+      previewBox.innerHTML = marked.parse(md, { breaks: true, gfm: true });
+    }
+
+    contentInput.addEventListener('input', updatePreview);
+
+    // Markdown toolbar helper
+    function insertMd(before, after) {
+      const ta = contentInput;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const selected = ta.value.slice(start, end);
+      const newText = before + (selected || 'text') + after;
+      ta.setRangeText(newText, start, end, 'select');
+      ta.focus();
+      updatePreview();
+    }
+
+    // Tab key support in editor
+    contentInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        insertMd('  ', '');
+      }
+    });
+
+    async function publishPost() {
+      const title = document.getElementById('post-title-input').value.trim();
+      const content = contentInput.value.trim();
+      const errEl = document.getElementById('editor-error');
+      const btn = document.getElementById('publish-btn');
+      errEl.classList.add('hidden');
+
+      if (!title || !content) {
+        errEl.textContent = 'Title and content are both required.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      btn.textContent = isEditing ? 'Updating...' : 'Publishing...';
+      btn.disabled = true;
+
+      try {
+        let post;
+        if (isEditing) {
+          post = await api.updatePost(editId, { title, content });
+          showToast('Post updated successfully! ✦', 'success');
+        } else {
+          post = await api.createPost({ title, content });
+          showToast('Post published! ✦', 'success');
+        }
+        setTimeout(() => window.location.href = '/post.html?id=' + post.id, 700);
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+        btn.textContent = isEditing ? '✦ Update Post' : '✦ Publish Post';
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
